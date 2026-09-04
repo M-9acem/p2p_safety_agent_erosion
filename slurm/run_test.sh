@@ -17,6 +17,10 @@ conda activate "$HOME/conda_envs/p2p_safety"
 cd "$SLURM_SUBMIT_DIR"
 export PYTHONPATH="$SLURM_SUBMIT_DIR/src:${PYTHONPATH:-}"
 export HF_HOME="$SLURM_SUBMIT_DIR/.cache/huggingface"
+# stdout is block-buffered when it's a file, not a tty — without this,
+# print()-based progress (loss/ASR per step) only shows up once the whole
+# job exits, which defeats checking on a long run mid-flight.
+export PYTHONUNBUFFERED=1
 
 # What to run — one line, easy to swap as phases progress.
 # Phase 0 (done, tagged phase-0-baseline-established): baseline safety
