@@ -3,13 +3,17 @@ full seeding, and the git SHA every run must log alongside its config.
 """
 from __future__ import annotations
 
+import os
 import random
 import subprocess
 
 
 def seed_everything(seed: int) -> None:
     """Seed python, numpy (if installed), and torch (if installed), and
-    set torch's deterministic flags. Call once at the start of every run.
+    set torch's deterministic flags. Call once at the start of every run,
+    before any CUDA op — cuBLAS reads CUBLAS_WORKSPACE_CONFIG at first use,
+    and torch.use_deterministic_algorithms(True) raises at the first
+    non-deterministic CUDA op (e.g. RoPE's matmul) if it isn't set yet.
     """
     random.seed(seed)
     try:
@@ -21,6 +25,7 @@ def seed_everything(seed: int) -> None:
     try:
         import torch
 
+        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         torch.use_deterministic_algorithms(True)
