@@ -1,0 +1,15 @@
+# @package experiment
+# Phase 1: single agent, no network. Validates the measurement stack before
+# any P2P machinery is trusted.
+name: single_agent
+
+n_rounds: 1
+local_steps: 200
+eval_every_steps: 25
+
+train:
+  lr: 2e-4
+  batch_size: 8
+  grad_accum: 1
+
+average_mode: null  # no averaging with a single agent

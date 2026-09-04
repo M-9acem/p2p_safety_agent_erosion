@@ -1,0 +1,23 @@
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# hydra run dirs
+outputs/
+multirun/
+
+# weights, checkpoints, datasets, results — tracked in W&B, not git
+*.pt
+*.bin
+*.safetensors
+checkpoints/
+results/*
+!results/.gitkeep
+
+# local secrets / env
+.env
+wandb/

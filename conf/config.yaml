@@ -1,0 +1,16 @@
+defaults:
+  - model: qwen2.5-1.5b
+  - graph: ring
+  - data: alpaca
+  - experiment: single_agent
+  - _self_
+
+seed: 0
+device: cuda
+
+wandb:
+  project: p2p-safety
+  entity: null
+  mode: online
+
+output_dir: ${hydra:runtime.output_dir}

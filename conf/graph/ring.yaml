@@ -1,0 +1,3 @@
+# @package graph
+topology: ring
+n_agents: 8

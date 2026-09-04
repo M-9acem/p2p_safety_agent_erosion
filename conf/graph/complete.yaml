@@ -1,0 +1,3 @@
+# @package graph
+topology: complete
+n_agents: 8

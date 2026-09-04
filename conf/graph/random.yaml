@@ -1,0 +1,5 @@
+# @package graph
+topology: random
+n_agents: 8
+# Erdos-Renyi edge probability
+p: 0.3

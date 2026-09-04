@@ -1,0 +1,12 @@
+# @package data
+task_dataset: alpaca
+hf_path: tatsu-lab/alpaca
+# Dirichlet concentration controlling non-IID-ness of the per-agent split.
+# Lower = more skewed/non-IID, higher = closer to IID.
+dirichlet_alpha: 0.5
+
+safety_holding:
+  enabled: false
+  n_agents: 0
+  placement: random  # random | well_connected | peripheral | clustered | spread
+  n_examples_per_agent: 20

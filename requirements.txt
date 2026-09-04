@@ -1,0 +1,21 @@
+# Full stack (spec section 5). Only numpy/networkx/pyyaml/pytest are
+# installed in the scaffolding environment (no GPU available there) — see
+# README.md "Environment notes". Install everything below before Phase 1.
+
+torch>=2.2
+transformers>=4.44
+peft>=0.12
+trl>=0.9
+datasets>=2.20
+
+hydra-core>=1.3
+omegaconf>=2.3
+wandb>=0.17
+
+networkx>=3.3
+numpy>=1.26
+
+# eval inference (optional, only if it fits per spec section 5)
+# vllm>=0.5
+
+pytest>=8.0

@@ -1,0 +1,10 @@
+# @package data
+task_dataset: dolly
+hf_path: databricks/databricks-dolly-15k
+dirichlet_alpha: 0.5
+
+safety_holding:
+  enabled: false
+  n_agents: 0
+  placement: random  # random | well_connected | peripheral | clustered | spread
+  n_examples_per_agent: 20

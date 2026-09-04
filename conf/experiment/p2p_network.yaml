@@ -1,0 +1,18 @@
+# @package experiment
+# Phase 3/4: full P2P round loop across the configured graph.
+name: p2p_network
+
+n_rounds: 40
+local_steps: 20
+eval_every_round: 5  # "every K rounds" per spec section 4
+
+train:
+  lr: 2e-4
+  batch_size: 8
+  grad_accum: 1
+
+# "params" averages LoRA A and B separately (cheap, technically wrong).
+# "delta" materializes per-module dW = (alpha/r) * B @ A, averages dW,
+# and refactors back to rank r via truncated SVD (correct, slower).
+# Run the main experiment in "delta"; comparing the two is a secondary result.
+average_mode: delta
