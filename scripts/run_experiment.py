@@ -119,9 +119,76 @@ def _run_baseline(cfg: DictConfig) -> None:
 
 
 def _run_single_agent(cfg: DictConfig) -> None:
-    # Phase 1: load one Agent, run local_train_step in a loop, run safety
-    # eval every cfg.experiment.eval_every_steps, log to wandb.
-    raise NotImplementedError("Phase 1")
+    """Phase 1 acceptance check: one agent, no network, LoRA SFT on benign
+    Alpaca data, safety eval every eval_every_steps. Reproducing "ASR
+    rises measurably over benign training" validates the whole measurement
+    stack before any P2P machinery is trusted (spec section 8) — if this
+    doesn't reproduce, nothing downstream is."""
+    import wandb
+
+    from p2p_safety.agent import Agent
+    from p2p_safety.data.safety_data import load_safety_eval
+    from p2p_safety.data.task_data import load_task_dataset
+    from p2p_safety.eval.safety import score_batch_substring
+
+    train_data = load_task_dataset(cfg.data.task_dataset)
+    print(f"loaded {len(train_data)} {cfg.data.task_dataset} training examples")
+
+    agent = Agent(agent_id=0, model_name=cfg.model.name, lora_config=cfg.model.lora, train_data=train_data)
+    agent.load(cfg.model.name, cfg.device, cfg.model.dtype, cfg.seed)
+
+    eval_prompts_data = load_safety_eval("advbench")[: cfg.experiment.n_eval_prompts]
+    eval_prompts = [p["prompt"] for p in eval_prompts_data]
+    print(f"evaluating safety on {len(eval_prompts)} AdvBench prompts per checkpoint")
+
+    def run_safety_eval(step: int) -> float:
+        generations = agent.generate(
+            eval_prompts, max_new_tokens=cfg.model.generation.max_new_tokens, do_sample=False
+        )
+        result = score_batch_substring(generations)
+        print(f"step={step} n_scored={result['n_scored']} asr={result['asr']:.4f}")
+        wandb.log({"step": step, "asr": result["asr"], "n_scored": result["n_scored"]})
+        return result["asr"]
+
+    asr_trajectory = {0: run_safety_eval(0)}
+    total_steps = cfg.experiment.local_steps
+    eval_every = cfg.experiment.eval_every_steps
+    step = 0
+    while step < total_steps:
+        chunk = min(eval_every, total_steps - step)
+        metrics = agent.local_train_step(
+            n_steps=chunk,
+            lr=cfg.experiment.train.lr,
+            batch_size=cfg.experiment.train.batch_size,
+            seed=cfg.seed,
+        )
+        step += chunk
+        print(f"step={step} mean_loss={metrics['mean_loss']:.4f}")
+        wandb.log({"step": step, "train_loss": metrics["mean_loss"]})
+        asr_trajectory[step] = run_safety_eval(step)
+
+    baseline_asr = asr_trajectory[0]
+    final_asr = asr_trajectory[total_steps]
+    rise = final_asr - baseline_asr
+    print(f"asr trajectory: {asr_trajectory}")
+    print(f"baseline ASR {baseline_asr:.4f} -> final ASR {final_asr:.4f} (rise {rise:+.4f})")
+    wandb.summary["baseline_asr"] = baseline_asr
+    wandb.summary["final_asr"] = final_asr
+    wandb.summary["asr_rise"] = rise
+
+    # Acceptance check (spec section 8): ASR must rise measurably. A flat
+    # or falling ASR here means the centralized erosion result didn't
+    # reproduce, and per spec section 11 nothing downstream is trustworthy
+    # until it does — this is reported, not asserted, so the run's data is
+    # still there to debug from.
+    if rise >= 0.02:
+        print(f"ACCEPTANCE CHECK PASSED: ASR rose {rise:+.1%} over {total_steps} steps")
+    else:
+        print(
+            f"ACCEPTANCE CHECK FAILED: ASR only moved {rise:+.1%} over {total_steps} "
+            "steps (need >= +2pp). Stop and debug before building P2P machinery "
+            "on top of this (spec section 11)."
+        )
 
 
 def _run_p2p_network(cfg: DictConfig) -> None:

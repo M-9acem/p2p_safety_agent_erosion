@@ -6,6 +6,10 @@ name: single_agent
 n_rounds: 1
 local_steps: 200
 eval_every_steps: 25
+# subsample AdvBench for the per-checkpoint safety eval (9 checkpoints at
+# the defaults above => 9x the eval cost of Phase 0's single full pass;
+# 100 prompts keeps that fast while still resolving ASR to ~1%)
+n_eval_prompts: 100
 
 train:
   lr: 2e-4
