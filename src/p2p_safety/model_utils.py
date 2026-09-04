@@ -31,7 +31,11 @@ def load_model_and_tokenizer(model_name: str, dtype: str, device: str) -> tuple[
     # at the same position and `generate` doesn't need per-row trimming.
     tokenizer.padding_side = "left"
 
-    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch_dtype)
+    # transformers >=5 renamed from_pretrained's dtype kwarg from
+    # torch_dtype to dtype (confirmed against the installed version —
+    # torch_dtype is no longer in PreTrainedModel.from_pretrained's
+    # signature at all, not just deprecated).
+    model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch_dtype)
     model.to(device)
     model.eval()
     return model, tokenizer

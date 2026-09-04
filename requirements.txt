@@ -1,16 +1,26 @@
 # Full stack (spec section 5). Only numpy/networkx/pyyaml/pytest are
-# installed in the scaffolding environment (no GPU available there) — see
-# README.md "Environment notes". Install everything below before Phase 1.
+# installed in the local scaffolding environment (no GPU there) — see
+# README.md. Versions below are what's actually running in the
+# `p2p_safety` conda env on the Hades cluster (confirmed working,
+# including a real Qwen2.5-1.5B-Instruct load + generate on GPU).
+#
+# Install with --only-binary=:all: first for the bulk of these (some
+# transitive deps, e.g. pyarrow via datasets, otherwise try to build from
+# source and need a Rust/Go toolchain that isn't on the cluster); then
+# install hydra-core/omegaconf as a normal (non-binary-only) install,
+# since antlr4-python3-runtime (a hydra-core dependency) only ships as an
+# sdist — building it is a trivial pure-Python build, no compiler needed.
 
-torch>=2.2
-transformers>=4.44
-peft>=0.12
-trl>=0.9
-datasets>=2.20
+torch==2.5.1
+transformers==5.16.1
+peft==0.20.0
+trl==0.29.1
+datasets==4.0.0
+accelerate==1.14.0
 
-hydra-core>=1.3
-omegaconf>=2.3
-wandb>=0.17
+hydra-core==1.3.6
+omegaconf==2.3.1
+wandb==0.23.0
 
 networkx>=3.3
 numpy>=1.26
