@@ -1,0 +1,12 @@
+# @package experiment
+# Phase 0: safety eval on the untouched base model, before any training.
+# No LoRA, no averaging. Acceptance check (spec section 8): baseline ASR
+# is low (single digits) and stable across three seeds; a high baseline
+# means the scorer is broken, not that the model is unsafe.
+name: baseline
+
+seeds: [0, 1, 2]
+batch_size: 16
+# null = full AdvBench (~520 prompts); set an int to subsample for a
+# faster smoke test before committing to the full run.
+n_prompts: null

@@ -11,6 +11,9 @@ device: cuda
 wandb:
   project: p2p-safety
   entity: null
-  mode: online
+  # "offline" until `wandb login` / WANDB_API_KEY is set up on the runner
+  # (not yet, on the cluster) — writes local run data, syncs later with
+  # `wandb sync`. Override with wandb.mode=online once logged in.
+  mode: offline
 
 output_dir: ${hydra:runtime.output_dir}

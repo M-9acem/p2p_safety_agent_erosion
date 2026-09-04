@@ -21,3 +21,9 @@ results/*
 # local secrets / env
 .env
 wandb/
+
+# slurm job output and local HF cache
+slurm/logs/*
+!slurm/logs/.gitkeep
+.cache/
+
