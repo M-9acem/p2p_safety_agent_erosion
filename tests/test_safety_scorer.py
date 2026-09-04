@@ -1,4 +1,12 @@
-from p2p_safety.eval.safety import score_batch_substring, score_generation_substring, scorer_agreement
+import pytest
+
+from p2p_safety.eval.safety import (
+    build_judge_prompt,
+    score_batch_classifier,
+    score_batch_substring,
+    score_generation_substring,
+    scorer_agreement,
+)
 
 
 def test_refusal_detected():
@@ -57,3 +65,71 @@ def test_scorer_agreement_mismatched_length_raises():
 
     with pytest.raises(ValueError):
         scorer_agreement(a, b)
+
+
+def test_build_judge_prompt_includes_request_and_response():
+    prompt = build_judge_prompt("do the bad thing", "here is how")
+    assert "do the bad thing" in prompt
+    assert "here is how" in prompt
+    assert "COMPLY" in prompt and "REFUSE" in prompt
+
+
+def test_classifier_scorer_parses_verdicts():
+    def fake_judge(judge_prompts: list[str]) -> list[str]:
+        assert len(judge_prompts) == 2
+        return ["REFUSE", "COMPLY"]
+
+    result = score_batch_classifier(
+        generations=["I can't do that.", "Sure, here you go."],
+        prompts=["p1", "p2"],
+        judge_generate=fake_judge,
+    )
+    assert result["n_scored"] == 2
+    assert result["n_refused"] == 1
+    assert result["asr"] == 0.5
+
+
+def test_classifier_scorer_skips_judge_call_for_empty_generations():
+    calls = []
+
+    def fake_judge(judge_prompts: list[str]) -> list[str]:
+        calls.append(len(judge_prompts))
+        return ["REFUSE"] * len(judge_prompts)
+
+    result = score_batch_classifier(
+        generations=["I can't do that.", "", "  "],
+        prompts=["p1", "p2", "p3"],
+        judge_generate=fake_judge,
+    )
+    assert calls == [1]  # only the one non-empty generation reaches the judge
+    assert result["n_excluded_empty"] == 2
+    assert result["n_scored"] == 1
+
+
+def test_classifier_scorer_excludes_unparseable_judge_output():
+    def fake_judge(judge_prompts: list[str]) -> list[str]:
+        return ["I'm not sure, could go either way"] * len(judge_prompts)
+
+    result = score_batch_classifier(
+        generations=["some response"], prompts=["p1"], judge_generate=fake_judge
+    )
+    assert result["n_scored"] == 0
+    assert result["n_excluded_empty"] == 1
+
+
+def test_classifier_scorer_mismatched_input_lengths_raises():
+    with pytest.raises(ValueError):
+        score_batch_classifier(
+            generations=["a", "b"], prompts=["p1"], judge_generate=lambda ps: ["REFUSE"] * len(ps)
+        )
+
+
+def test_scorer_agreement_between_substring_and_classifier():
+    generations = ["I cannot help with that.", "Sure, here you go."]
+    substring = score_batch_substring(generations)
+
+    def fake_judge(judge_prompts: list[str]) -> list[str]:
+        return ["REFUSE", "COMPLY"]
+
+    classifier = score_batch_classifier(generations, ["p1", "p2"], fake_judge)
+    assert scorer_agreement(substring, classifier) == 1.0
