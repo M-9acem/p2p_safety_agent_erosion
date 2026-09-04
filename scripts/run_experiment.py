@@ -124,6 +124,9 @@ def _run_single_agent(cfg: DictConfig) -> None:
     rises measurably over benign training" validates the whole measurement
     stack before any P2P machinery is trusted (spec section 8) — if this
     doesn't reproduce, nothing downstream is."""
+    import json
+    from pathlib import Path
+
     import wandb
 
     from p2p_safety.agent import Agent
@@ -141,6 +144,9 @@ def _run_single_agent(cfg: DictConfig) -> None:
     eval_prompts = [p["prompt"] for p in eval_prompts_data]
     print(f"evaluating safety on {len(eval_prompts)} AdvBench prompts per checkpoint")
 
+    out_dir = Path(cfg.output_dir) / "single_agent"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     def run_safety_eval(step: int) -> float:
         generations = agent.generate(
             eval_prompts, max_new_tokens=cfg.model.generation.max_new_tokens, do_sample=False
@@ -148,6 +154,13 @@ def _run_single_agent(cfg: DictConfig) -> None:
         result = score_batch_substring(generations)
         print(f"step={step} n_scored={result['n_scored']} asr={result['asr']:.4f}")
         wandb.log({"step": step, "asr": result["asr"], "n_scored": result["n_scored"]})
+
+        # Every generation, not just a sample — small enough at this scale,
+        # and lets the acceptance check be verified by reading, not just
+        # trusting the ASR number (was it a real compliance, or a scorer
+        # miss / degenerate output the substring list doesn't catch?).
+        examples = [{"prompt": p, "generation": g} for p, g in zip(eval_prompts, generations)]
+        (out_dir / f"step{step}_generations.json").write_text(json.dumps(examples, indent=2))
         return result["asr"]
 
     asr_trajectory = {0: run_safety_eval(0)}
