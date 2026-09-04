@@ -124,9 +124,6 @@ def _run_single_agent(cfg: DictConfig) -> None:
     rises measurably over benign training" validates the whole measurement
     stack before any P2P machinery is trusted (spec section 8) — if this
     doesn't reproduce, nothing downstream is."""
-    import json
-    from pathlib import Path
-
     import wandb
 
     from p2p_safety.agent import Agent
@@ -137,7 +134,7 @@ def _run_single_agent(cfg: DictConfig) -> None:
     train_data = load_task_dataset(cfg.data.task_dataset)
     print(f"loaded {len(train_data)} {cfg.data.task_dataset} training examples")
 
-    agent = Agent(agent_id=0, model_name=cfg.model.name, lora_config=cfg.model.lora, train_data=train_data)
+    agent = Agent(agent_id=0, lora_config=cfg.model.lora, train_data=train_data)
     agent.load(cfg.model.name, cfg.device, cfg.model.dtype, cfg.seed)
 
     eval_prompts_data = load_safety_eval("advbench")[: cfg.experiment.n_eval_prompts]
@@ -205,11 +202,178 @@ def _run_single_agent(cfg: DictConfig) -> None:
 
 
 def _run_p2p_network(cfg: DictConfig) -> None:
-    # Phase 3+: build the graph, load N agents (sharing the base model),
-    # partition data across them (+ safety-holding placement for RQ3),
-    # drive simulate.run_simulation with an eval_fn that logs to wandb and
-    # checkpoints every round (spec section 9: "checkpoint every round").
-    raise NotImplementedError("Phase 2/3")
+    """Phase 2 machinery + acceptance checks / Phase 3+ (RQ1, RQ2): build
+    the graph, load N agents sharing one base model, partition data
+    across them (or not — see experiment.identical_data, Phase 2's
+    acceptance-check knob), drive simulate.run_simulation with an eval_fn
+    that logs per-agent + network-level ASR and checkpoints every round
+    (spec section 9)."""
+    import numpy as np
+    import wandb
+
+    from p2p_safety.agent import Agent, build_shared_multi_agent_model
+    from p2p_safety.average import Adapter
+    from p2p_safety.data.partition import partition_indices
+    from p2p_safety.data.safety_data import load_safety_eval
+    from p2p_safety.data.task_data import load_task_dataset
+    from p2p_safety.eval.drift import network_asr_summary, network_drift
+    from p2p_safety.eval.safety import score_batch_substring
+    from p2p_safety.graph import build_graph, choose_agents_by_placement
+    from p2p_safety.model_utils import load_model_and_tokenizer
+    from p2p_safety.simulate import run_round
+
+    g = build_graph(
+        cfg.graph.topology, cfg.graph.n_agents, seed=cfg.seed, p=cfg.graph.get("p", 0.3)
+    )
+    agent_ids = list(g.nodes)
+    print(f"graph: {cfg.graph.topology}, {len(agent_ids)} agents, {g.number_of_edges()} edges")
+
+    task_data = load_task_dataset(cfg.data.task_dataset)
+    if cfg.experiment.identical_data:
+        shards = [list(range(len(task_data)))] * len(agent_ids)
+    else:
+        shards = partition_indices(len(task_data), len(agent_ids), cfg.data.dirichlet_alpha, seed=cfg.seed)
+    print(f"data: identical_data={cfg.experiment.identical_data}, shard sizes={[len(s) for s in shards]}")
+
+    safety_holding_ids: set[int] = set()
+    if cfg.data.safety_holding.enabled:
+        safety_holding_ids = set(
+            choose_agents_by_placement(
+                g, cfg.data.safety_holding.n_agents, cfg.data.safety_holding.placement, seed=cfg.seed
+            )
+        )
+        print(f"safety-holding agents ({cfg.data.safety_holding.placement}): {sorted(safety_holding_ids)}")
+
+    base_model, tokenizer = load_model_and_tokenizer(cfg.model.name, cfg.model.dtype, cfg.device)
+    seeds = {aid: cfg.seed * 1000 + aid for aid in agent_ids}
+    shared_model = build_shared_multi_agent_model(base_model, cfg.model.lora, agent_ids, seeds)
+
+    agents: dict[int, Agent] = {}
+    for aid in agent_ids:
+        agent = Agent(
+            agent_id=aid,
+            lora_config=cfg.model.lora,
+            train_data=[task_data[i] for i in shards[aid]],
+            is_safety_holding=aid in safety_holding_ids,
+        )
+        agent.bind(shared_model, tokenizer, cfg.device)
+        agents[aid] = agent
+
+    start_round = 0
+    if cfg.experiment.resume_from:
+        resume_dir = Path(cfg.experiment.resume_from)
+        start_round = int(resume_dir.name.removeprefix("round_")) + 1
+        for aid, agent in agents.items():
+            agent.load_checkpoint(str(resume_dir / f"agent_{aid}.npz"))
+        print(f"resumed from {resume_dir}, starting at round {start_round}")
+
+    eval_prompts_data = load_safety_eval("advbench")[: cfg.experiment.n_eval_prompts]
+    eval_prompts = [p["prompt"] for p in eval_prompts_data]
+
+    out_dir = Path(cfg.output_dir) / "p2p_network"
+    ckpt_dir = out_dir / "checkpoints"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+    alpha, r = cfg.model.lora.alpha, cfg.model.lora.r
+    hand_check_agents = agent_ids == [0, 1] and cfg.graph.topology == "complete"
+    pre_round0_state: dict[int, Adapter] | None = None
+
+    def eval_fn(round_idx: int) -> dict:
+        asr_by_agent = {}
+        for aid, agent in agents.items():
+            generations = agent.generate(
+                eval_prompts, max_new_tokens=cfg.model.generation.max_new_tokens, do_sample=False
+            )
+            asr_by_agent[aid] = score_batch_substring(generations)["asr"]
+
+        states = {aid: agent.get_adapter_state() for aid, agent in agents.items()}
+        summary = network_asr_summary(asr_by_agent)
+        drift = network_drift(states, alpha, r) if len(agents) > 1 else {"mean": 0.0}
+        print(
+            f"round={round_idx} asr_mean={summary['mean']:.4f} asr_min={summary['min']:.4f} "
+            f"asr_max={summary['max']:.4f} drift_mean={drift['mean']:.4f}"
+        )
+        wandb.log(
+            {
+                "round": round_idx,
+                "asr_mean": summary["mean"],
+                "asr_min": summary["min"],
+                "asr_max": summary["max"],
+                "asr_variance": summary["variance"],
+                "drift_mean": drift["mean"],
+                **{f"asr_agent_{aid}": v for aid, v in asr_by_agent.items()},
+            }
+        )
+
+        round_dir = ckpt_dir / f"round_{round_idx}"
+        round_dir.mkdir(parents=True, exist_ok=True)
+        for aid, agent in agents.items():
+            agent.save_checkpoint(str(round_dir / f"agent_{aid}.npz"))
+        (out_dir / f"round{round_idx}_asr.json").write_text(
+            json.dumps({"asr_by_agent": asr_by_agent, "summary": summary, "drift": drift}, indent=2)
+        )
+        return {"round": round_idx, "asr_by_agent": asr_by_agent, "drift": drift}
+
+    if hand_check_agents:
+        pre_round0_state = {aid: agents[aid].get_adapter_state() for aid in agent_ids}
+
+    eval_log = []
+    max_svd_reconstruction_error = 0.0
+    n_rounds_to_run = cfg.experiment.n_rounds - start_round
+    for i in range(n_rounds_to_run):
+        round_idx = start_round + i
+        round_info = run_round(
+            g,
+            agents,
+            round_idx,
+            local_steps=cfg.experiment.local_steps,
+            lr=cfg.experiment.train.lr,
+            batch_size=cfg.experiment.train.batch_size,
+            average_mode=cfg.experiment.average_mode,
+            lora_alpha=alpha,
+            lora_r=r,
+            seed=cfg.seed,
+        )
+        if cfg.experiment.average_mode == "delta":
+            for info in round_info.values():
+                errors = info["average_info"].get("reconstruction_error", {})
+                if errors:
+                    max_svd_reconstruction_error = max(max_svd_reconstruction_error, max(errors.values()))
+
+        is_last = round_idx == cfg.experiment.n_rounds - 1
+        if cfg.experiment.eval_every_round and (round_idx % cfg.experiment.eval_every_round == 0 or is_last):
+            eval_log.append(eval_fn(round_idx))
+
+    # Phase 2 acceptance check, verified by hand: a 2-agent complete graph
+    # round reduces to plain params-mode averaging (spec section 8). Only
+    # meaningful for average_mode=params — delta mode is deliberately not
+    # equal to plain averaging (that's the whole point of section 4's
+    # subtlety), so only run this when it actually applies.
+    if hand_check_agents and pre_round0_state and cfg.experiment.average_mode == "params":
+        post_state = {aid: agents[aid].get_adapter_state() for aid in agent_ids}
+        max_err = 0.0
+        for module in pre_round0_state[0]:
+            err_A = float(np.abs(post_state[0][module]["A"] - post_state[1][module]["A"]).max())
+            err_B = float(np.abs(post_state[0][module]["B"] - post_state[1][module]["B"]).max())
+            max_err = max(max_err, err_A, err_B)
+        # both agents' closed neighborhood in a 2-agent complete graph is
+        # {0, 1} — same inputs, same averaging function, so params-mode
+        # averaging must leave them bit-for-bit identical every round,
+        # not just after round 0.
+        if max_err < 1e-5:
+            print(f"HAND CHECK PASSED: both agents identical after averaging (max diff {max_err:.2e})")
+        else:
+            print(f"HAND CHECK FAILED: agents diverged after averaging (max diff {max_err:.2e})")
+
+    if cfg.experiment.average_mode == "delta":
+        print(f"delta-mode max SVD reconstruction error across all rounds/modules: {max_svd_reconstruction_error:.4f}")
+        wandb.summary["max_svd_reconstruction_error"] = max_svd_reconstruction_error
+        if max_svd_reconstruction_error < 1.0:
+            print("ACCEPTANCE CHECK PASSED: delta-mode SVD reconstruction error bounded")
+        else:
+            print("ACCEPTANCE CHECK FAILED: delta-mode SVD reconstruction error unbounded — check rank/alpha config")
+
+    print(f"completed {n_rounds_to_run} rounds, {len(eval_log)} eval checkpoints logged")
 
 
 if __name__ == "__main__":
