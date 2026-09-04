@@ -46,6 +46,7 @@ def run_round(
     lora_alpha: float | None = None,
     lora_r: int | None = None,
     seed: int = 0,
+    svd_device: str | None = None,
 ) -> dict[int, dict[str, Any]]:
     """Run one round: LOCAL TRAIN, EXCHANGE, AVERAGE for every agent.
 
@@ -76,7 +77,7 @@ def run_round(
         neighborhood = closed_neighborhood(g, agent_id)
         neighbor_states = [post_train_state[n] for n in neighborhood]
         new_state, info = average_adapters(
-            neighbor_states, mode=average_mode, alpha=lora_alpha, r=lora_r
+            neighbor_states, mode=average_mode, alpha=lora_alpha, r=lora_r, svd_device=svd_device
         )
         agent.set_adapter_state(new_state)
         round_info[agent_id]["average_info"] = info
@@ -97,6 +98,7 @@ def run_simulation(
     lora_alpha: float | None = None,
     lora_r: int | None = None,
     seed: int = 0,
+    svd_device: str | None = None,
 ) -> list[dict[str, Any]]:
     """Drive n_rounds of run_round, calling eval_fn(round_idx, agents)
     every eval_every_round rounds (and after the final round). Returns the
@@ -114,6 +116,7 @@ def run_simulation(
             lora_alpha,
             lora_r,
             seed,
+            svd_device,
         )
         is_last = round_idx == n_rounds - 1
         if eval_every_round and (round_idx % eval_every_round == 0 or is_last):

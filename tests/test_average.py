@@ -157,3 +157,25 @@ def test_mismatched_target_modules_raises():
     a2 = _random_adapter(["k_proj"], r=4, in_dim=8, out_dim=8, seed=2)
     with pytest.raises(ValueError):
         average_params([a1, a2])
+
+
+def test_refactor_svd_device_matches_numpy_path():
+    # Skipped where torch isn't installed (this scaffold's local venv) —
+    # runs for real on the cluster, where svd_device="cuda" is what a
+    # real p2p_network run actually uses (CPU numpy SVD measured ~16s on
+    # an MLP-projection-sized real matrix; ~200 such per agent per round
+    # made delta mode impractical until this existed).
+    pytest.importorskip("torch")
+    A = RNG.normal(size=(8, 32)).astype(np.float64)
+    B = RNG.normal(size=(24, 8)).astype(np.float64)
+    dW = materialize_delta(A, B, alpha=16, r=8)
+
+    A_cpu, B_cpu, err_cpu = refactor_svd(dW, r=8, alpha=16, svd_device=None)
+    A_dev, B_dev, err_dev = refactor_svd(dW, r=8, alpha=16, svd_device="cpu")
+
+    # SVD sign/ordering can differ slightly between backends; compare the
+    # reconstructed dW, not A/B directly.
+    dW_hat_cpu = materialize_delta(A_cpu, B_cpu, alpha=16, r=8)
+    dW_hat_dev = materialize_delta(A_dev, B_dev, alpha=16, r=8)
+    np.testing.assert_allclose(dW_hat_cpu, dW_hat_dev, atol=1e-4)
+    assert abs(err_cpu - err_dev) < 1e-4

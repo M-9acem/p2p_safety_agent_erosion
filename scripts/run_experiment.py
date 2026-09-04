@@ -333,6 +333,7 @@ def _run_p2p_network(cfg: DictConfig) -> None:
             lora_alpha=alpha,
             lora_r=r,
             seed=cfg.seed,
+            svd_device=cfg.device,
         )
         if cfg.experiment.average_mode == "delta":
             for info in round_info.values():
