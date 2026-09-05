@@ -78,6 +78,11 @@ def batched_generate(
                 max_new_tokens=max_new_tokens,
                 do_sample=do_sample,
                 pad_token_id=tokenizer.pad_token_id,
+                # Agent training turns use_cache off (required alongside
+                # gradient checkpointing); generation wants it back on for
+                # normal autoregressive-decoding speed regardless of what
+                # training last set on model.config.
+                use_cache=True,
             )
             new_ids = gen_ids[:, inputs["input_ids"].shape[1] :]
             outputs.extend(tokenizer.batch_decode(new_ids, skip_special_tokens=True))

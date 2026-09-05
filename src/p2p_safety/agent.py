@@ -54,7 +54,24 @@ def build_shared_multi_agent_model(
         seed_everything(seeds[aid])
         peft_model.add_adapter(f"agent_{aid}", make_peft_config())
     peft_model.train()
+    _enable_memory_saving(peft_model)
     return peft_model
+
+
+def _enable_memory_saving(model: Any) -> None:
+    """Gradient checkpointing trades recompute for not storing every
+    layer's activations for backward — the difference between fitting and
+    a real CUDA OOM hit during Phase 2's first multi-agent delta-mode run
+    (22+ GiB allocated on a 24GB GPU at batch_size=8, ~512 tokens, and a
+    ~150k-token vocab lm_head). enable_input_require_grads is the standard
+    companion call for a frozen (PEFT) base model — without it, nothing in
+    the recomputed segments requires grad and checkpointing silently does
+    nothing. use_cache=False is required alongside checkpointing during
+    training; model_utils.batched_generate re-enables it for eval.
+    """
+    model.gradient_checkpointing_enable()
+    model.enable_input_require_grads()
+    model.config.use_cache = False
 
 
 @dataclass
@@ -93,6 +110,7 @@ class Agent:
         )
         model = get_peft_model(model, peft_config)
         model.train()
+        _enable_memory_saving(model)
 
         self._model = model
         self._tokenizer = tokenizer
