@@ -56,7 +56,7 @@ class NoOpAgent:
     def set_adapter_state(self, adapter: Adapter) -> None:
         self._adapter = adapter
 
-    def local_train_step(self, n_steps, lr, batch_size, seed) -> dict:
+    def local_train_step(self, n_steps, lr, batch_size, seed, **kwargs) -> dict:
         self.train_calls += 1
         return {"loss": 0.0}
 

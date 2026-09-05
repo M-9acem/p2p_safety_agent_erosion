@@ -32,7 +32,7 @@ class RoundAgent(Protocol):
 
     def get_adapter_state(self) -> Adapter: ...
     def set_adapter_state(self, adapter: Adapter) -> None: ...
-    def local_train_step(self, n_steps: int, lr: float, batch_size: int, seed: int) -> dict[str, float]: ...
+    def local_train_step(self, n_steps: int, lr: float, batch_size: int, seed: int, **kwargs: Any) -> dict[str, float]: ...
 
 
 def run_round(
@@ -47,6 +47,7 @@ def run_round(
     lora_r: int | None = None,
     seed: int = 0,
     svd_device: str | None = None,
+    max_seq_length: int = 512,
 ) -> dict[int, dict[str, Any]]:
     """Run one round: LOCAL TRAIN, EXCHANGE, AVERAGE for every agent.
 
@@ -67,7 +68,11 @@ def run_round(
     post_train_state: dict[int, Adapter] = {}
     for agent_id, agent in agents.items():
         metrics = agent.local_train_step(
-            n_steps=local_steps, lr=lr, batch_size=batch_size, seed=seed + round_idx
+            n_steps=local_steps,
+            lr=lr,
+            batch_size=batch_size,
+            seed=seed + round_idx,
+            max_seq_length=max_seq_length,
         )
         post_train_state[agent_id] = agent.get_adapter_state()
         round_info[agent_id] = {"train_metrics": metrics}
@@ -99,6 +104,7 @@ def run_simulation(
     lora_r: int | None = None,
     seed: int = 0,
     svd_device: str | None = None,
+    max_seq_length: int = 512,
 ) -> list[dict[str, Any]]:
     """Drive n_rounds of run_round, calling eval_fn(round_idx, agents)
     every eval_every_round rounds (and after the final round). Returns the
@@ -117,6 +123,7 @@ def run_simulation(
             lora_r,
             seed,
             svd_device,
+            max_seq_length,
         )
         is_last = round_idx == n_rounds - 1
         if eval_every_round and (round_idx % eval_every_round == 0 or is_last):

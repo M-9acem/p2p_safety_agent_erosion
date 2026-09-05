@@ -195,11 +195,22 @@ class Agent:
         )
         return prompt, example["output"]
 
-    def local_train_step(self, n_steps: int, lr: float, batch_size: int, seed: int) -> dict[str, float]:
+    def local_train_step(
+        self, n_steps: int, lr: float, batch_size: int, seed: int, max_seq_length: int = 512
+    ) -> dict[str, float]:
         """E steps of LoRA SFT: response-only loss (prompt tokens masked
         to -100) on self.train_data, plus self.safety_examples for a
         safety-holding agent (spec section 5, RQ3 data). Never touches
-        p2p_safety.data.safety_data."""
+        p2p_safety.data.safety_data.
+
+        max_seq_length caps each example (prompt+response truncated
+        together, keeping the end — the response matters more than the
+        start of a long instruction). Without it, a single unluckily long
+        Alpaca example in a random batch caused a real CUDA OOM in a
+        Phase 2 run: no gradient checkpointing means every layer's full
+        activations are retained for backward, and a handful of long
+        sequences at batch_size=8 was enough to exhaust a 24GB GPU.
+        """
         import torch
 
         self._activate()
@@ -226,6 +237,11 @@ class Agent:
                 response_ids = tokenizer(response + tokenizer.eos_token, add_special_tokens=False)["input_ids"]
                 ids = prompt_ids + response_ids
                 labels = [-100] * len(prompt_ids) + response_ids
+                if len(ids) > max_seq_length:
+                    # keep the tail: the response (what's being trained
+                    # on) matters more than the start of a long prompt
+                    ids = ids[-max_seq_length:]
+                    labels = labels[-max_seq_length:]
                 input_ids_list.append(ids)
                 labels_list.append(labels)
 
