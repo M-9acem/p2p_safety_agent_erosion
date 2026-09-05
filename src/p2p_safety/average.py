@@ -24,6 +24,7 @@ pass it — on plain numpy.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any
 
 import numpy as np
@@ -103,11 +104,61 @@ def refactor_svd(
     return A, B, rel_err
 
 
+def refactor_svd_batch(
+    dW_batch: np.ndarray, r: int, alpha: float, svd_device: str | None = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Batched refactor_svd: dW_batch is (K, out, in) — K same-shaped
+    updates refactored in ONE SVD call. Both numpy and torch treat extra
+    leading dims of linalg.svd's input as a batch of matrices, so this is
+    the same math as calling refactor_svd K times, just far less
+    per-matrix Python/kernel-launch overhead.
+
+    Real model sizes are why this exists: ~200 LoRA layers per agent per
+    round, but only a handful of distinct shapes (one per target module
+    type — every layer of a given type is the same shape), so grouping by
+    shape turns e.g. 196 individual SVD calls into ~7 batched ones. On a
+    Phase 3-scale run this was the difference between a round taking
+    minutes vs. the several-times-that a per-module Python loop cost even
+    with the GPU acceleration `refactor_svd`'s svd_device already gives
+    each individual call.
+
+    Returns (A_batch (K,r,in), B_batch (K,out,r), rel_errors (K,)).
+    """
+    if svd_device is not None:
+        import torch
+
+        dW_t = torch.from_numpy(dW_batch).to(svd_device)
+        U_t, S_t, Vt_t = torch.linalg.svd(dW_t, full_matrices=False)
+        U, S, Vt = U_t.cpu().numpy(), S_t.cpu().numpy(), Vt_t.cpu().numpy()
+    else:
+        U, S, Vt = np.linalg.svd(dW_batch, full_matrices=False)
+
+    r_eff = min(r, S.shape[-1])
+    U_r, S_r, Vt_r = U[..., :r_eff], S[..., :r_eff], Vt[..., :r_eff, :]
+
+    scale = np.sqrt(r / alpha)
+    sqrt_S = np.sqrt(S_r)  # (K, r_eff)
+    B = U_r * sqrt_S[:, None, :] * scale  # (K, out, r_eff)
+    A = sqrt_S[:, :, None] * Vt_r * scale  # (K, r_eff, in)
+
+    if r_eff < r:
+        pad_out = r - r_eff
+        B = np.pad(B, ((0, 0), (0, 0), (0, pad_out)))
+        A = np.pad(A, ((0, 0), (0, pad_out), (0, 0)))
+
+    dW_hat = (alpha / r) * np.matmul(B, A)
+    denom = np.linalg.norm(dW_batch, axis=(1, 2))
+    diff = np.linalg.norm(dW_hat - dW_batch, axis=(1, 2))
+    rel_err = np.divide(diff, denom, out=np.zeros_like(diff), where=denom > 0)
+    return A, B, rel_err
+
+
 def average_delta(
     adapters: list[Adapter], alpha: float, r: int, svd_device: str | None = None
 ) -> tuple[Adapter, dict[str, float]]:
     """delta-mode: materialize dW per module per adapter, average the dW's,
-    refactor back to rank r via truncated SVD.
+    refactor back to rank r via truncated SVD — batched by shape (see
+    refactor_svd_batch) rather than one module at a time.
 
     Returns:
         (new_adapter, reconstruction_errors) where reconstruction_errors
@@ -116,14 +167,24 @@ def average_delta(
     """
     if not adapters:
         raise ValueError("adapters must be non-empty")
-    out: Adapter = {}
-    errors: dict[str, float] = {}
+
+    dW_means: dict[str, np.ndarray] = {}
     for m in _module_names(adapters):
         dWs = [materialize_delta(a[m]["A"], a[m]["B"], alpha, r) for a in adapters]
-        dW_mean = np.mean(dWs, axis=0)
-        A, B, err = refactor_svd(dW_mean, r, alpha, svd_device=svd_device)
-        out[m] = {"A": A, "B": B}
-        errors[m] = err
+        dW_means[m] = np.mean(dWs, axis=0)
+
+    groups: dict[tuple[int, ...], list[str]] = defaultdict(list)
+    for m, dW in dW_means.items():
+        groups[dW.shape].append(m)
+
+    out: Adapter = {}
+    errors: dict[str, float] = {}
+    for names in groups.values():
+        stacked = np.stack([dW_means[m] for m in names], axis=0)
+        A_batch, B_batch, err_batch = refactor_svd_batch(stacked, r, alpha, svd_device=svd_device)
+        for i, m in enumerate(names):
+            out[m] = {"A": A_batch[i], "B": B_batch[i]}
+            errors[m] = float(err_batch[i])
     return out, errors
 
 

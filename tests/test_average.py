@@ -179,3 +179,34 @@ def test_refactor_svd_device_matches_numpy_path():
     dW_hat_dev = materialize_delta(A_dev, B_dev, alpha=16, r=8)
     np.testing.assert_allclose(dW_hat_cpu, dW_hat_dev, atol=1e-4)
     assert abs(err_cpu - err_dev) < 1e-4
+
+
+def test_average_delta_batches_by_shape_matches_per_module_result():
+    # average_delta groups same-shaped modules into one batched SVD call
+    # (real models have ~200 LoRA layers but only a handful of distinct
+    # shapes) — this is a regression guard that batching gives the exact
+    # same per-module result as refactoring one module at a time.
+    alpha, r = 8, 4
+    a1 = {
+        "q_proj": {"A": RNG.normal(size=(r, 8)), "B": RNG.normal(size=(8, r))},
+        "o_proj": {"A": RNG.normal(size=(r, 8)), "B": RNG.normal(size=(8, r))},  # same shape as q_proj
+        "down_proj": {"A": RNG.normal(size=(r, 32)), "B": RNG.normal(size=(16, r))},  # different shape
+    }
+    a2 = {
+        "q_proj": {"A": RNG.normal(size=(r, 8)), "B": RNG.normal(size=(8, r))},
+        "o_proj": {"A": RNG.normal(size=(r, 8)), "B": RNG.normal(size=(8, r))},
+        "down_proj": {"A": RNG.normal(size=(r, 32)), "B": RNG.normal(size=(16, r))},
+    }
+
+    batched_result, batched_errors = average_delta([a1, a2], alpha, r)
+
+    for m in a1:
+        dW_mean = (
+            materialize_delta(a1[m]["A"], a1[m]["B"], alpha, r)
+            + materialize_delta(a2[m]["A"], a2[m]["B"], alpha, r)
+        ) / 2
+        A_expected, B_expected, err_expected = refactor_svd(dW_mean, r, alpha)
+        dW_hat_batched = materialize_delta(batched_result[m]["A"], batched_result[m]["B"], alpha, r)
+        dW_hat_expected = materialize_delta(A_expected, B_expected, alpha, r)
+        np.testing.assert_allclose(dW_hat_batched, dW_hat_expected, atol=1e-8)
+        assert abs(batched_errors[m] - err_expected) < 1e-8
