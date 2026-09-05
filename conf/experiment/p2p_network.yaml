@@ -24,7 +24,8 @@ average_mode: delta
 # machinery's convergence behavior from any effect of differing data.
 identical_data: false
 
-# Resume from a previous run's checkpoint dir, e.g.
-# ".../outputs/2026-.../p2p_network/checkpoints/round_9" — starts at
-# round 10. null = start fresh at round 0.
+# Resume from a previous (crashed/timed-out) run's checkpoint dir, e.g.
+# ".../outputs/2026-.../p2p_network/checkpoints/latest" — reads round.txt
+# there to know which round to continue from. null = start fresh at
+# round 0.
 resume_from: null

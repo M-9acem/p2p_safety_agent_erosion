@@ -262,7 +262,7 @@ def _run_p2p_network(cfg: DictConfig) -> None:
     start_round = 0
     if cfg.experiment.resume_from:
         resume_dir = Path(cfg.experiment.resume_from)
-        start_round = int(resume_dir.name.removeprefix("round_")) + 1
+        start_round = int((resume_dir / "round.txt").read_text().strip()) + 1
         for aid, agent in agents.items():
             agent.load_checkpoint(str(resume_dir / f"agent_{aid}.npz"))
         print(f"resumed from {resume_dir}, starting at round {start_round}")
@@ -271,7 +271,14 @@ def _run_p2p_network(cfg: DictConfig) -> None:
     eval_prompts = [p["prompt"] for p in eval_prompts_data]
 
     out_dir = Path(cfg.output_dir) / "p2p_network"
-    ckpt_dir = out_dir / "checkpoints"
+    # One overwritten "latest" checkpoint, not one directory per round: at
+    # r=8 this model's LoRA state is ~37MB/agent, so keeping every round's
+    # checkpoint for a 16-agent, 40-round run would be ~24GB — and ~320GB
+    # across the full phase 3 sweep's 18 runs, uncomfortably close to the
+    # cluster's free quota. The only purpose a checkpoint serves is
+    # resuming a crashed/timed-out run; the actual scientific record (ASR,
+    # drift) is the tiny per-round JSON below, already kept in full.
+    ckpt_dir = out_dir / "checkpoints" / "latest"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     alpha, r = cfg.model.lora.alpha, cfg.model.lora.r
@@ -305,10 +312,6 @@ def _run_p2p_network(cfg: DictConfig) -> None:
             }
         )
 
-        round_dir = ckpt_dir / f"round_{round_idx}"
-        round_dir.mkdir(parents=True, exist_ok=True)
-        for aid, agent in agents.items():
-            agent.save_checkpoint(str(round_dir / f"agent_{aid}.npz"))
         (out_dir / f"round{round_idx}_asr.json").write_text(
             json.dumps({"asr_by_agent": asr_by_agent, "summary": summary, "drift": drift}, indent=2)
         )
@@ -340,6 +343,12 @@ def _run_p2p_network(cfg: DictConfig) -> None:
                 errors = info["average_info"].get("reconstruction_error", {})
                 if errors:
                     max_svd_reconstruction_error = max(max_svd_reconstruction_error, max(errors.values()))
+
+        # Checkpoint every round (spec section 9), overwriting the same
+        # "latest" files rather than accumulating one set per round.
+        for aid, agent in agents.items():
+            agent.save_checkpoint(str(ckpt_dir / f"agent_{aid}.npz"))
+        (ckpt_dir / "round.txt").write_text(str(round_idx))
 
         is_last = round_idx == cfg.experiment.n_rounds - 1
         if cfg.experiment.eval_every_round and (round_idx % cfg.experiment.eval_every_round == 0 or is_last):
