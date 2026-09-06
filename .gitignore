@@ -27,3 +27,8 @@ slurm/logs/*
 !slurm/logs/.gitkeep
 .cache/
 
+# operational bookkeeping edited directly on the cluster (sed'd in place
+# between job submissions) — not experiment code, must never make the
+# working tree "dirty" and trip get_git_sha()'s uncommitted-changes guard
+slurm/phase3_queue.txt
+
