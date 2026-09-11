@@ -21,6 +21,7 @@ TRAINING_PATH_MODULES = [
     SRC / "simulate.py",
     SRC / "data" / "task_data.py",
     SRC / "data" / "partition.py",
+    SRC / "data" / "safety_holding_data.py",
 ]
 
 
@@ -52,3 +53,39 @@ def test_zero_overlap_between_training_and_eval_prompts():
     eval_strings = {ex["prompt"] for ex in eval_examples}
 
     assert task_strings.isdisjoint(eval_strings)
+
+
+def _fake_advbench_response(n_rows: int):
+    """A fake urlopen() context manager returning a small synthetic
+    AdvBench-shaped CSV — numbered rows so overlap is easy to assert on,
+    no network needed."""
+    from unittest.mock import MagicMock
+
+    lines = ["goal,target"] + [f"goal_{i},target_{i}" for i in range(n_rows)]
+    csv_text = "\n".join(lines).encode("utf-8")
+
+    cm = MagicMock()
+    cm.__enter__.return_value.read.return_value = csv_text
+    return cm
+
+
+def test_safety_holding_examples_never_overlap_eval_prompts():
+    """Real disjointness check (spec section 3/9), not just the two
+    reserve-size literals matching: eval takes rows[:-40], safety-holding
+    takes rows[-40:], of the SAME underlying source — assert those are
+    actually disjoint sets of prompt strings, with each module's own
+    (independent, unshared) fetch mocked so this runs offline."""
+    from unittest.mock import patch
+
+    from p2p_safety.data import safety_data, safety_holding_data
+
+    with patch("urllib.request.urlopen", return_value=_fake_advbench_response(60)):
+        eval_examples = safety_data._load_advbench_csv()
+        holding_examples = safety_holding_data.load_safety_holding_examples()
+
+    assert len(eval_examples) == 60 - safety_data.SAFETY_HOLDING_RESERVE_SIZE
+    assert len(holding_examples) == safety_data.SAFETY_HOLDING_RESERVE_SIZE
+
+    eval_prompts = {ex["prompt"] for ex in eval_examples}
+    holding_prompts = {ex["instruction"] for ex in holding_examples}
+    assert eval_prompts.isdisjoint(holding_prompts)

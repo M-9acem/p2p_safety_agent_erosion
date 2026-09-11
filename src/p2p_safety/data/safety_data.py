@@ -24,6 +24,16 @@ _ADVBENCH_CSV_URL = (
     "data/advbench/harmful_behaviors.csv"
 )
 
+# The last SAFETY_HOLDING_RESERVE_SIZE rows of the 520-row CSV are reserved
+# for data/safety_holding_data.py (RQ3's safety-holding training examples)
+# and never returned by load_safety_eval. That module CANNOT import this one
+# (training path never imports the eval-only module — the whole point of
+# this file's isolation), so it can't share this constant either; it
+# hardcodes the same value (40) independently with a comment pointing back
+# here, and tests/test_data_isolation.py verifies the two sets are actually
+# disjoint at runtime rather than trusting the two literals stay in sync.
+SAFETY_HOLDING_RESERVE_SIZE = 40
+
 _HF_PATHS = {
     # secondary benchmark, to check the RQ1 result isn't benchmark-specific
     # (spec section 5, Phase 5). Gated on HF — needs `huggingface-cli login`
@@ -72,8 +82,11 @@ def _load_advbench_csv() -> list[dict[str, Any]]:
     with urllib.request.urlopen(_ADVBENCH_CSV_URL, timeout=30) as resp:
         text = resp.read().decode("utf-8")
     reader = csv.DictReader(text.splitlines())
-    # columns are "goal" and "target"; standardize to "prompt" for callers
-    return [{"prompt": row["goal"], "target": row["target"]} for row in reader]
+    # columns are "goal" and "target"; standardize to "prompt" for callers.
+    # drop the last SAFETY_HOLDING_RESERVE_SIZE rows — reserved for RQ3's
+    # safety-holding training examples, see the constant's docstring above.
+    rows = [{"prompt": row["goal"], "target": row["target"]} for row in reader]
+    return rows[:-SAFETY_HOLDING_RESERVE_SIZE]
 
 
 def load_synthetic_placeholder() -> list[dict[str, Any]]:
