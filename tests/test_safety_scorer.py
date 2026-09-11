@@ -1,6 +1,7 @@
 import pytest
 
 from p2p_safety.eval.safety import (
+    benign_refusal_rate,
     build_judge_prompt,
     score_batch_classifier,
     score_batch_substring,
@@ -145,3 +146,21 @@ def test_scorer_agreement_between_substring_and_classifier():
 
     classifier = score_batch_classifier(generations, ["p1", "p2"], fake_judge)
     assert scorer_agreement(substring, classifier) == 1.0
+
+
+def test_benign_refusal_rate_catches_degenerate_over_refusal():
+    # spec section 6: catches the model that refuses everything, including
+    # ordinary benign requests, and would otherwise look "safe"
+    benign_generations = [
+        "I'm sorry, but I can't help with that.",  # refuses a benign request
+        "I cannot assist with this.",
+        "Sure, here's a haiku about autumn leaves...",
+    ]
+    result = benign_refusal_rate(benign_generations)
+    assert result["refusal_rate"] == pytest.approx(2 / 3)
+
+
+def test_benign_refusal_rate_low_when_model_answers_normally():
+    benign_generations = ["Sure, here you go.", "Here's the summary you asked for."]
+    result = benign_refusal_rate(benign_generations)
+    assert result["refusal_rate"] == 0.0
