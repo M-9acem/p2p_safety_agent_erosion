@@ -9,13 +9,25 @@ metrics, and the phased build plan this repo follows.
 
 ## Status
 
-Phase 0 scaffold. Repo structure, Hydra config tree, and all `src/`
-modules are in place. Everything that doesn't require a GPU or the
-model-loading stack (graph construction, both averaging modes, data
-partitioning, the substring refusal scorer, the round-loop orchestration
-logic) is implemented and tested. `agent.py`'s model-loading, training,
-and generation methods, and the eval/analysis code that depends on real
-model output, are Phase 1 stubs — see their docstrings.
+**Phases 0–3 complete**, all on real trained models (Qwen2.5-1.5B-Instruct,
+LoRA r=8) on a SLURM/GPU cluster — not just the unit tests. Tagged
+milestones: `phase-0-baseline-established`, `phase-1-erosion-reproduced`,
+`phase-1-classifier-scorer-fixed`, `phase-2-p2p-machinery-validated`.
+
+**Headline result** (Phase 3, 18-run sweep — {ring, random, complete} ×
+{8, 16} agents × 3 seeds, 40 rounds each): safety erosion happens and
+spreads through *every* configuration, from a 0.4% baseline to 50–74%
+final ASR (RQ1 — clear yes). Connectivity density does **not** show a
+statistically distinguishable effect on erosion magnitude — the spread
+between topologies (3.5pp) is smaller than the seed-to-seed spread within
+a single topology (up to 6.7pp) (RQ2 — no clear effect, reported honestly
+rather than dressed up).
+
+**Full analysis with plots and tables:** [`notebooks/results_analysis.ipynb`](notebooks/results_analysis.ipynb).
+
+RQ3 (repair via safety-holding peers) is the natural next phase — the
+config path (`data.safety_holding`) is already wired into
+`_run_p2p_network`, just never exercised at scale.
 
 ## Setup
 
@@ -53,10 +65,23 @@ git commit SHA (`p2p_safety.utils.get_git_sha`) logged with every run.
 
 ## Running an experiment
 
-Once the full stack is installed (Phase 1+):
+```bash
+python scripts/run_experiment.py experiment=baseline
+python scripts/run_experiment.py experiment=single_agent
+python scripts/run_experiment.py experiment=p2p_network graph=random graph.n_agents=8 seed=0
+```
+
+Cluster-specific tooling (SLURM job script, queue-managed sweep runner,
+results-pull script) lives in [`slurm/`](slurm/).
+
+## Results notebook
 
 ```bash
-python scripts/run_experiment.py experiment=single_agent
-python scripts/run_experiment.py experiment=p2p_network graph=random
-python scripts/sweep.py --multirun graph=ring,random,complete seed=0,1,2
+pip install -r requirements.txt   # or just matplotlib/pandas/jupyter/nbconvert/ipykernel
+jupyter nbconvert --to notebook --execute --inplace notebooks/results_analysis.ipynb
 ```
+
+Reads `outputs/` (Phases 0–2) and `slurm/logs/*.out` (Phase 3 — the
+source of truth for the sweep; see the notebook's own note on why, not
+the timestamp-collision-prone `outputs/` dirs) directly — no hand-entered
+numbers anywhere in it.

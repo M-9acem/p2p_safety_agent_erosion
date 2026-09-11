@@ -29,3 +29,12 @@ numpy>=1.26
 # vllm>=0.5
 
 pytest>=8.0
+
+# notebooks/results_analysis.ipynb only — none of the GPU/cluster stack
+# above is needed to run it, just these plus the numpy/networkx/pyyaml
+# already covered for the local scaffold
+matplotlib>=3.8
+pandas>=2.2
+jupyter
+nbconvert
+ipykernel
