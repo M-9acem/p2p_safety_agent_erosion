@@ -22,9 +22,15 @@ results/*
 .env
 wandb/
 
-# slurm job output and local HF cache
+# slurm job output — .out logs ARE tracked (small plain text, and the
+# notebooks/results_analysis.ipynb source of truth for phase 3 reads them
+# directly); .err logs are excluded (httpx/progress-bar debug noise, not
+# needed by anything in the repo)
 slurm/logs/*
 !slurm/logs/.gitkeep
+!slurm/logs/*.out
+
+# local HF cache
 .cache/
 
 # operational bookkeeping edited directly on the cluster (sed'd in place

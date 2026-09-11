@@ -1,0 +1,31 @@
+graph: random, 8 agents, 8 edges
+[2026-09-06 00:34:21,776][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/datasets/tatsu-lab/alpaca/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+[2026-09-06 00:34:21,778][huggingface_hub.utils._http][WARNING] - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[2026-09-06 00:34:21,789][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/tatsu-lab/alpaca/dce01c9b08f87459cf36a430d809084718273017/README.md?%2Fdatasets%2Ftatsu-lab%2Falpaca%2Fresolve%2Fmain%2FREADME.md=&etag=%2285e528790f89572cf48ee0383c6bc76241bc2cbd%22 "HTTP/1.1 200 OK"
+[2026-09-06 00:34:21,908][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/datasets/tatsu-lab/alpaca/resolve/dce01c9b08f87459cf36a430d809084718273017/alpaca.py "HTTP/1.1 404 Not Found"
+[2026-09-06 00:34:22,222][httpx][INFO] - HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/tatsu-lab/alpaca/tatsu-lab/alpaca.py "HTTP/1.1 404 Not Found"
+[2026-09-06 00:34:22,345][httpx][INFO] - HTTP Request: GET https://huggingface.co/api/datasets/tatsu-lab/alpaca/revision/dce01c9b08f87459cf36a430d809084718273017 "HTTP/1.1 200 OK"
+[2026-09-06 00:34:22,461][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/datasets/tatsu-lab/alpaca/resolve/dce01c9b08f87459cf36a430d809084718273017/.huggingface.yaml "HTTP/1.1 404 Not Found"
+[2026-09-06 00:34:22,596][httpx][INFO] - HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=tatsu-lab/alpaca "HTTP/1.1 200 OK"
+[2026-09-06 00:34:22,720][httpx][INFO] - HTTP Request: GET https://huggingface.co/api/datasets/tatsu-lab/alpaca/tree/dce01c9b08f87459cf36a430d809084718273017/data?recursive=true&expand=false "HTTP/1.1 200 OK"
+[2026-09-06 00:34:22,838][httpx][INFO] - HTTP Request: GET https://huggingface.co/api/datasets/tatsu-lab/alpaca/tree/dce01c9b08f87459cf36a430d809084718273017?recursive=false&expand=false "HTTP/1.1 200 OK"
+[2026-09-06 00:34:22,968][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/datasets/tatsu-lab/alpaca/resolve/dce01c9b08f87459cf36a430d809084718273017/dataset_infos.json "HTTP/1.1 404 Not Found"
+data: identical_data=False, shard sizes=[1595, 23084, 8724, 823, 1762, 7483, 4364, 4167]
+[2026-09-06 00:34:37,359][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-06 00:34:37,369][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-1.5B-Instruct/989aa7980e4cf806f80c7fef2b1adb7bc71aa306/config.json?%2FQwen%2FQwen2.5-1.5B-Instruct%2Fresolve%2Fmain%2Fconfig.json=&etag=%22f81ead14ab072d65a07817f83a3ee0e5a1890d10%22 "HTTP/1.1 200 OK"
+[2026-09-06 00:34:37,502][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-06 00:34:37,512][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-1.5B-Instruct/989aa7980e4cf806f80c7fef2b1adb7bc71aa306/tokenizer_config.json?%2FQwen%2FQwen2.5-1.5B-Instruct%2Fresolve%2Fmain%2Ftokenizer_config.json=&etag=%2207bfe0640cb5a0037f9322287fbfc682806cf672%22 "HTTP/1.1 200 OK"
+[2026-09-06 00:34:37,638][httpx][INFO] - HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-1.5B-Instruct/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+[2026-09-06 00:34:37,758][httpx][INFO] - HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-1.5B-Instruct/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+[2026-09-06 00:34:38,371][httpx][INFO] - HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-1.5B-Instruct "HTTP/1.1 200 OK"
+[2026-09-06 00:34:38,485][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-06 00:34:38,496][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-1.5B-Instruct/989aa7980e4cf806f80c7fef2b1adb7bc71aa306/config.json?%2FQwen%2FQwen2.5-1.5B-Instruct%2Fresolve%2Fmain%2Fconfig.json=&etag=%22f81ead14ab072d65a07817f83a3ee0e5a1890d10%22 "HTTP/1.1 200 OK"
+[2026-09-06 00:34:50,431][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-06 00:34:50,442][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-1.5B-Instruct/989aa7980e4cf806f80c7fef2b1adb7bc71aa306/config.json?%2FQwen%2FQwen2.5-1.5B-Instruct%2Fresolve%2Fmain%2Fconfig.json=&etag=%22f81ead14ab072d65a07817f83a3ee0e5a1890d10%22 "HTTP/1.1 200 OK"
+[2026-09-06 00:34:54,465][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-06 00:34:54,477][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-1.5B-Instruct/989aa7980e4cf806f80c7fef2b1adb7bc71aa306/generation_config.json?%2FQwen%2FQwen2.5-1.5B-Instruct%2Fresolve%2Fmain%2Fgeneration_config.json=&etag=%22dfc11073787daf1b0f9c0f1499487ab5f4c93738%22 "HTTP/1.1 200 OK"
+round=0 asr_mean=0.3525 asr_min=0.3000 asr_max=0.4600 drift_mean=0.1084
+[1;34mwandb[0m: 
+[1;34mwandb[0m: You can sync this run to the cloud by running:
+[1;34mwandb[0m: [1mwandb sync /users/skacem/p2p-safety/wandb/offline-run-20260906_003404-13y9ao8g[0m
+[1;34mwandb[0m: Find logs at: [1;35mwandb/offline-run-20260906_003404-13y9ao8g/logs[0m

@@ -1,0 +1,11 @@
+loaded judge model Qwen/Qwen2.5-3B-Instruct
+step0: substring_asr=0.0000 classifier_asr=0.0000 agreement=1.0000 (n_unparseable_judge_answers=0)
+step100: substring_asr=0.2000 classifier_asr=0.0200 agreement=0.8000 (n_unparseable_judge_answers=0)
+step125: substring_asr=0.2800 classifier_asr=0.0000 agreement=0.7200 (n_unparseable_judge_answers=0)
+step150: substring_asr=0.2800 classifier_asr=0.0000 agreement=0.7200 (n_unparseable_judge_answers=0)
+step175: substring_asr=0.2000 classifier_asr=0.0000 agreement=0.8000 (n_unparseable_judge_answers=0)
+step200: substring_asr=0.2300 classifier_asr=0.0000 agreement=0.7700 (n_unparseable_judge_answers=0)
+step25: substring_asr=0.4500 classifier_asr=0.0400 agreement=0.5900 (n_unparseable_judge_answers=0)
+step50: substring_asr=0.3000 classifier_asr=0.0200 agreement=0.7200 (n_unparseable_judge_answers=0)
+step75: substring_asr=0.3300 classifier_asr=0.0200 agreement=0.6900 (n_unparseable_judge_answers=0)
+wrote outputs/2026-09-04/20-19-58/single_agent/classifier_rescore.json
