@@ -215,10 +215,12 @@ def _run_p2p_network(cfg: DictConfig) -> None:
     from p2p_safety.average import Adapter
     from p2p_safety.data.partition import partition_indices
     from p2p_safety.data.safety_data import load_safety_eval
+    from p2p_safety.data.safety_holding_data import load_safety_holding_examples
     from p2p_safety.data.task_data import load_task_dataset
-    from p2p_safety.eval.drift import network_asr_summary, network_drift
-    from p2p_safety.eval.safety import score_batch_substring
-    from p2p_safety.graph import build_graph, choose_agents_by_placement
+    from p2p_safety.eval.capability import run_held_out_task, run_mmlu_subset
+    from p2p_safety.eval.drift import asr_by_hop_distance, network_asr_summary, network_drift
+    from p2p_safety.eval.safety import benign_refusal_rate, score_batch_substring
+    from p2p_safety.graph import build_graph, choose_agents_by_placement, hop_distances
     from p2p_safety.model_utils import load_model_and_tokenizer
     from p2p_safety.simulate import run_round
 
@@ -228,7 +230,13 @@ def _run_p2p_network(cfg: DictConfig) -> None:
     agent_ids = list(g.nodes)
     print(f"graph: {cfg.graph.topology}, {len(agent_ids)} agents, {g.number_of_edges()} edges")
 
-    task_data = load_task_dataset(cfg.data.task_dataset)
+    task_data_full = load_task_dataset(cfg.data.task_dataset)
+    # held out BEFORE partitioning — never seen by any agent's training
+    # shard, used for benign refusal rate + held-out task F1 below.
+    n_reserve = cfg.experiment.n_held_out_reserve
+    held_out_examples = task_data_full[-n_reserve:] if n_reserve else []
+    task_data = task_data_full[:-n_reserve] if n_reserve else task_data_full
+
     if cfg.experiment.identical_data:
         shards = [list(range(len(task_data)))] * len(agent_ids)
     else:
@@ -236,13 +244,16 @@ def _run_p2p_network(cfg: DictConfig) -> None:
     print(f"data: identical_data={cfg.experiment.identical_data}, shard sizes={[len(s) for s in shards]}")
 
     safety_holding_ids: set[int] = set()
+    safety_examples: list = []
     if cfg.data.safety_holding.enabled:
         safety_holding_ids = set(
             choose_agents_by_placement(
                 g, cfg.data.safety_holding.n_agents, cfg.data.safety_holding.placement, seed=cfg.seed
             )
         )
+        safety_examples = load_safety_holding_examples(cfg.data.safety_holding.n_examples_per_agent)
         print(f"safety-holding agents ({cfg.data.safety_holding.placement}): {sorted(safety_holding_ids)}")
+        print(f"  {len(safety_examples)} refusal examples each (never overlapping the eval set)")
 
     base_model, tokenizer = load_model_and_tokenizer(cfg.model.name, cfg.model.dtype, cfg.device)
     seeds = {aid: cfg.seed * 1000 + aid for aid in agent_ids}
@@ -255,9 +266,12 @@ def _run_p2p_network(cfg: DictConfig) -> None:
             lora_config=cfg.model.lora,
             train_data=[task_data[i] for i in shards[aid]],
             is_safety_holding=aid in safety_holding_ids,
+            safety_examples=list(safety_examples) if aid in safety_holding_ids else [],
         )
         agent.bind(shared_model, tokenizer, cfg.device)
         agents[aid] = agent
+
+    hop_dist_from_holders = hop_distances(g, sorted(safety_holding_ids)) if safety_holding_ids else {}
 
     start_round = 0
     if cfg.experiment.resume_from:
@@ -269,6 +283,9 @@ def _run_p2p_network(cfg: DictConfig) -> None:
 
     eval_prompts_data = load_safety_eval("advbench")[: cfg.experiment.n_eval_prompts]
     eval_prompts = [p["prompt"] for p in eval_prompts_data]
+    # benign refusal rate (spec section 6) reuses the same held-out slice
+    # as the capability task eval — never a training example for any agent
+    benign_eval_prompts = [ex["instruction"] for ex in held_out_examples[: cfg.experiment.n_eval_prompts]]
 
     out_dir = Path(cfg.output_dir) / "p2p_network"
     # One overwritten "latest" checkpoint, not one directory per round: at
@@ -287,11 +304,23 @@ def _run_p2p_network(cfg: DictConfig) -> None:
 
     def eval_fn(round_idx: int) -> dict:
         asr_by_agent = {}
+        generations_by_agent = {}
+        benign_refusal_by_agent = {}
         for aid, agent in agents.items():
             generations = agent.generate(
                 eval_prompts, max_new_tokens=cfg.model.generation.max_new_tokens, do_sample=False
             )
             asr_by_agent[aid] = score_batch_substring(generations)["asr"]
+            # saved every round (not just a sample) so this run can be
+            # classifier-rescored later without redoing any training —
+            # phase 3's sweep didn't do this and turned out to need it
+            # (spec section 6: score both ways).
+            generations_by_agent[aid] = generations
+            if cfg.experiment.full_metrics:
+                benign_gens = agent.generate(
+                    benign_eval_prompts, max_new_tokens=cfg.model.generation.max_new_tokens, do_sample=False
+                )
+                benign_refusal_by_agent[aid] = benign_refusal_rate(benign_gens)["refusal_rate"]
 
         states = {aid: agent.get_adapter_state() for aid, agent in agents.items()}
         summary = network_asr_summary(asr_by_agent)
@@ -300,20 +329,64 @@ def _run_p2p_network(cfg: DictConfig) -> None:
             f"round={round_idx} asr_mean={summary['mean']:.4f} asr_min={summary['min']:.4f} "
             f"asr_max={summary['max']:.4f} drift_mean={drift['mean']:.4f}"
         )
-        wandb.log(
-            {
-                "round": round_idx,
-                "asr_mean": summary["mean"],
-                "asr_min": summary["min"],
-                "asr_max": summary["max"],
-                "asr_variance": summary["variance"],
-                "drift_mean": drift["mean"],
-                **{f"asr_agent_{aid}": v for aid, v in asr_by_agent.items()},
-            }
-        )
+        log_payload = {
+            "round": round_idx,
+            "asr_mean": summary["mean"],
+            "asr_min": summary["min"],
+            "asr_max": summary["max"],
+            "asr_variance": summary["variance"],
+            "drift_mean": drift["mean"],
+            **{f"asr_agent_{aid}": v for aid, v in asr_by_agent.items()},
+        }
 
-        (out_dir / f"round{round_idx}_asr.json").write_text(
-            json.dumps({"asr_by_agent": asr_by_agent, "summary": summary, "drift": drift}, indent=2)
+        hop_asr: dict = {}
+        if hop_dist_from_holders:
+            # the rq3 headline plot: asr as a function of hop distance
+            # from the nearest safety-holding agent
+            hop_asr = asr_by_hop_distance(asr_by_agent, hop_dist_from_holders)
+            log_payload.update({f"asr_hop{h}": v["mean_asr"] for h, v in hop_asr.items()})
+            print(f"  asr by hop distance from nearest safety-holding agent: {hop_asr}")
+
+        capability: dict = {}
+        if cfg.experiment.full_metrics:
+            log_payload.update({f"benign_refusal_agent_{aid}": v for aid, v in benign_refusal_by_agent.items()})
+            log_payload["benign_refusal_mean"] = sum(benign_refusal_by_agent.values()) / len(benign_refusal_by_agent)
+
+            def make_generate(agent):
+                return lambda prompts: agent.generate(
+                    prompts, max_new_tokens=cfg.model.generation.max_new_tokens, do_sample=False
+                )
+
+            # capability eval is expensive (two more generation passes per
+            # agent) — one representative agent per round, not all of them,
+            # to keep full_metrics runs affordable; still gives the
+            # "did benign capability collapse" signal the metric is for.
+            sample_agent = agents[agent_ids[0]]
+            mmlu = run_mmlu_subset(make_generate(sample_agent), cfg.experiment.mmlu_subset_size, seed=cfg.seed)
+            held_out = run_held_out_task(
+                make_generate(sample_agent), held_out_examples[: cfg.experiment.n_held_out_task_examples]
+            )
+            capability = {"mmlu": mmlu, "held_out_task": held_out}
+            log_payload["mmlu_accuracy"] = mmlu["accuracy"]
+            log_payload["held_out_task_f1"] = held_out["mean_f1"]
+            print(f"  [agent {agent_ids[0]}] mmlu_accuracy={mmlu['accuracy']:.3f} held_out_f1={held_out['mean_f1']:.3f}")
+
+        wandb.log(log_payload)
+
+        (out_dir / f"round{round_idx}_asr.json").write_text(json.dumps(
+            {
+                "asr_by_agent": asr_by_agent, "summary": summary, "drift": drift,
+                "hop_asr": hop_asr, "benign_refusal_by_agent": benign_refusal_by_agent,
+                "capability": capability,
+            },
+            indent=2,
+        ))
+        (out_dir / f"round{round_idx}_generations.json").write_text(
+            json.dumps(
+                {str(aid): [{"prompt": p, "generation": g} for p, g in zip(eval_prompts, gens)]
+                 for aid, gens in generations_by_agent.items()},
+                indent=2,
+            )
         )
         return {"round": round_idx, "asr_by_agent": asr_by_agent, "drift": drift}
 

@@ -29,3 +29,16 @@ identical_data: false
 # there to know which round to continue from. null = start fresh at
 # round 0.
 resume_from: null
+
+# spec section 6's full per-agent-per-round metric set (benign refusal
+# rate, MMLU subset, held-out task F1) beyond ASR/drift — real added eval
+# cost per round, so off by default for large sweeps (phase 3, a rank
+# sweep, replication) and turned on explicitly for smaller/higher-value
+# runs (rq3) where the extra signal is worth the time.
+full_metrics: false
+mmlu_subset_size: 20
+n_held_out_task_examples: 20
+# reserved from the END of the task dataset, before Dirichlet partitioning
+# — never seen by any agent's training shard, used for both benign
+# refusal rate and the held-out task F1 metric above.
+n_held_out_reserve: 50
