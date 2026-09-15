@@ -10,25 +10,35 @@ venv/
 outputs/
 multirun/
 
-# weights, checkpoints, datasets, results — tracked in W&B, not git
+# weights, checkpoints, datasets, results — tracked in W&B, not git.
+# Exception: results/rq3/ — the headline deliverable's small (KB-scale)
+# summary JSON, not a checkpoint or dataset, and the notebook's RQ3
+# section reads it directly (spec's "README with the headline figure").
 *.pt
 *.bin
 *.safetensors
 checkpoints/
 results/*
 !results/.gitkeep
+!results/rq3/
+!results/rq3/**
 
 # local secrets / env
 .env
 wandb/
 
-# slurm job output — .out logs ARE tracked (small plain text, and the
-# notebooks/results_analysis.ipynb source of truth for phase 3 reads them
-# directly); .err logs are excluded (httpx/progress-bar debug noise, not
-# needed by anything in the repo)
+# slurm job output — .out logs get tracked, but only RETROACTIVELY once
+# a sweep is done (see notebooks/results_analysis.ipynb, which reads
+# them directly as phase 3's source of truth). Do NOT add a prospective
+# "!slurm/logs/*.out" override here: SLURM creates a fresh, empty,
+# untracked .out file the instant a job starts (before Python even
+# runs), which trips get_git_sha()'s clean-tree guard and kills every
+# job in a sweep on startup. This repo doesn't launch jobs itself (the
+# cluster checkout does — see its own .gitignore and the same note
+# there), but keep this ignored-by-default so a copy-paste of this file
+# into a run-capable checkout doesn't reintroduce the bug.
 slurm/logs/*
 !slurm/logs/.gitkeep
-!slurm/logs/*.out
 
 # local HF cache
 .cache/

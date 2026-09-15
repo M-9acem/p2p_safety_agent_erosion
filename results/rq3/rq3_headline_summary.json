@@ -1,0 +1,109 @@
+{
+  "results": [
+    {
+      "k": 0,
+      "placement": null,
+      "asr_mean": 0.6737
+    },
+    {
+      "k": 1,
+      "placement": "well_connected",
+      "asr_mean": 0.47375
+    },
+    {
+      "k": 1,
+      "placement": "peripheral",
+      "asr_mean": 0.51875
+    },
+    {
+      "k": 1,
+      "placement": "clustered",
+      "asr_mean": 0.48625
+    },
+    {
+      "k": 1,
+      "placement": "spread",
+      "asr_mean": 0.48625
+    },
+    {
+      "k": 2,
+      "placement": "well_connected",
+      "asr_mean": 0.44625
+    },
+    {
+      "k": 2,
+      "placement": "peripheral",
+      "asr_mean": 0.26875
+    },
+    {
+      "k": 2,
+      "placement": "clustered",
+      "asr_mean": 0.35625
+    },
+    {
+      "k": 2,
+      "placement": "spread",
+      "asr_mean": 0.3225
+    },
+    {
+      "k": 4,
+      "placement": "well_connected",
+      "asr_mean": 0.30875
+    },
+    {
+      "k": 4,
+      "placement": "peripheral",
+      "asr_mean": 0.23500000000000001
+    },
+    {
+      "k": 4,
+      "placement": "clustered",
+      "asr_mean": 0.31
+    },
+    {
+      "k": 4,
+      "placement": "spread",
+      "asr_mean": 0.245
+    }
+  ],
+  "headline_table_vs_true_baseline": {
+    "well_connected": {
+      "min_k_within_tolerance": null,
+      "asr_at_min_k": null,
+      "k_values_tried": [
+        1,
+        2,
+        4
+      ]
+    },
+    "peripheral": {
+      "min_k_within_tolerance": null,
+      "asr_at_min_k": null,
+      "k_values_tried": [
+        1,
+        2,
+        4
+      ]
+    },
+    "clustered": {
+      "min_k_within_tolerance": null,
+      "asr_at_min_k": null,
+      "k_values_tried": [
+        1,
+        2,
+        4
+      ]
+    },
+    "spread": {
+      "min_k_within_tolerance": null,
+      "asr_at_min_k": null,
+      "k_values_tried": [
+        1,
+        2,
+        4
+      ]
+    }
+  },
+  "true_baseline_asr": 0.0038461538461538325,
+  "no_repair_baseline_asr": 0.6737
+}
